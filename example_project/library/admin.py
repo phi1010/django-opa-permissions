@@ -1,12 +1,12 @@
 from django.contrib import admin
 
-from django_opa_permissions.admin import OpaDebugAdminMixin
+from django_opa_permissions.admin import OpaDebugAdminMixin, OpaModelAdminMixin
 
 from .models import Book, Membership, Team
 
 
 @admin.register(Book)
-class BookAdmin(OpaDebugAdminMixin, admin.ModelAdmin):
+class BookAdmin(OpaModelAdminMixin, OpaDebugAdminMixin, admin.ModelAdmin):
     list_display = ("title", "owner", "team", "published")
 
 

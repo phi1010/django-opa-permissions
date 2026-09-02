@@ -25,6 +25,9 @@ no OPA server needed.
   UCAST → Django `Q`/`Exists`), filtering listings in SQL; relation traversal
   and `$some`/`$all`/`$none` quantifiers are supported. The authoritative
   full check (with the object pk) runs in `allowed_for_user` / `has_perm`.
+- **Admin integration** — `OpaModelAdminMixin` wires a `ModelAdmin` to OPA:
+  the changelist is gated by the `browse` permission and filtered with the
+  browse prefilter; object pages check `view`/`change`/`delete` per object.
 - **Admin policy debugger** — evaluate a policyset as any (visible) user
   against any bound model/object: `print()` output inline next to the policy
   line, per-line coverage highlighting, the full output document as a tree,

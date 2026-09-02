@@ -223,6 +223,49 @@ class PolicyAdmin(admin.ModelAdmin):
         return out
 
 
+class OpaModelAdminMixin:
+    """Wire a ModelAdmin to OPA permissions.
+
+    The Django admin asks ``has_view_permission(request, obj=None)`` to decide
+    whether a model is listable at all — that is exactly the ``browse``
+    pseudo-permission, so it is answered with the model-level browse check
+    (the plain auth backend answers obj-less ``view`` with False by design).
+    The changelist queryset is additionally filtered with the browse
+    prefilter; object-level view/change/delete go through the backend as
+    usual. Add both this and :class:`OpaDebugAdminMixin` for the full setup.
+    """
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        # bypass (superusers) yields a match-all Q
+        return qs.filter(get_backend().compile_browse_q(request.user, self.model))
+
+    def has_module_permission(self, request):
+        return get_backend().has_module_perms(request.user, self.opts.app_label)
+
+    def has_view_permission(self, request, obj=None):
+        backend = get_backend()
+        if obj is None:
+            return backend.check_permission(request.user, "browse", self.model)
+        return backend.check_permission(
+            request.user, "view", self.model, obj=obj
+        ) or backend.check_permission(request.user, "change", self.model, obj=obj)
+
+    def has_change_permission(self, request, obj=None):
+        if obj is None:
+            # model-level: only the browse question is answerable
+            return get_backend().check_permission(request.user, "browse", self.model)
+        return get_backend().check_permission(request.user, "change", self.model, obj=obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is None:
+            return get_backend().check_permission(request.user, "browse", self.model)
+        return get_backend().check_permission(request.user, "delete", self.model, obj=obj)
+
+    def has_add_permission(self, request):
+        return get_backend().check_permission(request.user, "add", self.model)
+
+
 class OpaDebugAdminMixin:
     """Add to a ModelAdmin to get a "Debug policy" link on every change form,
     pointing at the policy debugger with model, object pk, action and the
