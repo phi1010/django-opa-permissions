@@ -24,22 +24,33 @@ from .backends import get_backend
 from .models import Policy, PolicySet, PolicySetBinding, PolicySetMembership
 
 
+def get_admin_base() -> type[admin.ModelAdmin]:
+    """The base class for this app's ModelAdmins, configurable via the
+    ``DJANGO_OPA_ADMIN_BASE`` setting (dotted path to a ModelAdmin subclass).
+    Resolved when this module is imported — the setting must exist before
+    Django loads the admin."""
+    from django.conf import settings
+    from django.core.exceptions import ImproperlyConfigured
+    from django.utils.module_loading import import_string
+
+    path = getattr(
+        settings, "DJANGO_OPA_ADMIN_BASE", "django.contrib.admin.ModelAdmin"
+    )
+    base = import_string(path)
+    if not (isinstance(base, type) and issubclass(base, admin.ModelAdmin)):
+        raise ImproperlyConfigured(
+            f"DJANGO_OPA_ADMIN_BASE ({path!r}) must be a ModelAdmin subclass"
+        )
+    return base
+
+
+AdminBase = get_admin_base()
+
+
 class PolicySetMembershipInline(admin.TabularInline):
     model = PolicySetMembership
     fields = ("policy", "sort_order")
     extra = 0
-
-
-@admin.register(PolicySet)
-class PolicySetAdmin(admin.ModelAdmin):
-    list_display = ("name", "created_at", "updated_at")
-    inlines = [PolicySetMembershipInline]
-
-
-@admin.register(PolicySetBinding)
-class PolicySetBindingAdmin(admin.ModelAdmin):
-    list_display = ("content_type", "policy_set")
-    list_select_related = ("content_type", "policy_set")
 
 
 class PolicyDebugForm(forms.Form):
@@ -107,8 +118,84 @@ def _annotate_policy(policy, prints, coverage):
     return {"policy": policy, "lines": lines}
 
 
+class OpaModelAdminMixin:
+    """Wire a ModelAdmin to OPA permissions.
+
+    The Django admin asks ``has_view_permission(request, obj=None)`` to decide
+    whether a model is listable at all — that is exactly the ``browse``
+    pseudo-permission, so it is answered with the model-level browse check
+    (the plain auth backend answers obj-less ``view`` with False by design).
+    The changelist queryset is additionally filtered with the browse
+    prefilter; object-level view/change/delete go through the backend.
+
+    Classic Django model permissions remain a fallback: whatever the default
+    ModelAdmin checks grant (e.g. via groups and ModelBackend) is still
+    granted, with an unfiltered changelist. Add both this and
+    :class:`OpaDebugAdminMixin` for the full setup.
+    """
+
+    def _django_grants_view(self, request):
+        return super().has_view_permission(request, None)
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if self._django_grants_view(request):
+            return qs  # classic Django perms: full, unfiltered access
+        # bypass (superusers) yields a match-all Q
+        return qs.filter(get_backend().compile_browse_q(request.user, self.model))
+
+    def has_module_permission(self, request):
+        return get_backend().has_module_perms(
+            request.user, self.opts.app_label
+        ) or super().has_module_permission(request)
+
+    def has_view_permission(self, request, obj=None):
+        backend = get_backend()
+        if obj is None:
+            allowed = backend.check_permission(request.user, "browse", self.model)
+        else:
+            allowed = backend.check_permission(
+                request.user, "view", self.model, obj=obj
+            ) or backend.check_permission(request.user, "change", self.model, obj=obj)
+        return allowed or super().has_view_permission(request, obj)
+
+    def has_change_permission(self, request, obj=None):
+        if obj is None:
+            # model-level: only the browse question is answerable
+            allowed = get_backend().check_permission(request.user, "browse", self.model)
+        else:
+            allowed = get_backend().check_permission(
+                request.user, "change", self.model, obj=obj)
+        return allowed or super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is None:
+            allowed = get_backend().check_permission(request.user, "browse", self.model)
+        else:
+            allowed = get_backend().check_permission(
+                request.user, "delete", self.model, obj=obj)
+        return allowed or super().has_delete_permission(request, obj)
+
+    def has_add_permission(self, request):
+        return get_backend().check_permission(
+            request.user, "add", self.model
+        ) or super().has_add_permission(request)
+
+
+@admin.register(PolicySet)
+class PolicySetAdmin(OpaModelAdminMixin, AdminBase):
+    list_display = ("name", "created_at", "updated_at")
+    inlines = [PolicySetMembershipInline]
+
+
+@admin.register(PolicySetBinding)
+class PolicySetBindingAdmin(OpaModelAdminMixin, AdminBase):
+    list_display = ("content_type", "policy_set")
+    list_select_related = ("content_type", "policy_set")
+
+
 @admin.register(Policy)
-class PolicyAdmin(admin.ModelAdmin):
+class PolicyAdmin(OpaModelAdminMixin, AdminBase):
     list_display = ("name", "sets", "debug_link")
     list_filter = ("policy_sets",)
 
@@ -221,49 +308,6 @@ class PolicyAdmin(admin.ModelAdmin):
             except Exception as exc:
                 out["object_included_error"] = str(exc)
         return out
-
-
-class OpaModelAdminMixin:
-    """Wire a ModelAdmin to OPA permissions.
-
-    The Django admin asks ``has_view_permission(request, obj=None)`` to decide
-    whether a model is listable at all — that is exactly the ``browse``
-    pseudo-permission, so it is answered with the model-level browse check
-    (the plain auth backend answers obj-less ``view`` with False by design).
-    The changelist queryset is additionally filtered with the browse
-    prefilter; object-level view/change/delete go through the backend as
-    usual. Add both this and :class:`OpaDebugAdminMixin` for the full setup.
-    """
-
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        # bypass (superusers) yields a match-all Q
-        return qs.filter(get_backend().compile_browse_q(request.user, self.model))
-
-    def has_module_permission(self, request):
-        return get_backend().has_module_perms(request.user, self.opts.app_label)
-
-    def has_view_permission(self, request, obj=None):
-        backend = get_backend()
-        if obj is None:
-            return backend.check_permission(request.user, "browse", self.model)
-        return backend.check_permission(
-            request.user, "view", self.model, obj=obj
-        ) or backend.check_permission(request.user, "change", self.model, obj=obj)
-
-    def has_change_permission(self, request, obj=None):
-        if obj is None:
-            # model-level: only the browse question is answerable
-            return get_backend().check_permission(request.user, "browse", self.model)
-        return get_backend().check_permission(request.user, "change", self.model, obj=obj)
-
-    def has_delete_permission(self, request, obj=None):
-        if obj is None:
-            return get_backend().check_permission(request.user, "browse", self.model)
-        return get_backend().check_permission(request.user, "delete", self.model, obj=obj)
-
-    def has_add_permission(self, request):
-        return get_backend().check_permission(request.user, "add", self.model)
 
 
 class OpaDebugAdminMixin:

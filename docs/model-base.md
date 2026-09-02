@@ -37,3 +37,12 @@ Rules:
   then run `manage.py makemigrations django_opa_permissions`.
 - If your base replaces the primary key (e.g. an int pk), everything still
   works — policy filenames and cache keys use `pk` generically.
+
+# Custom admin base class
+
+`DJANGO_OPA_ADMIN_BASE` (dotted path, default
+`django.contrib.admin.ModelAdmin`) names the `ModelAdmin` subclass that this
+app's own admins (`PolicyAdmin`, `PolicySetAdmin`, `PolicySetBindingAdmin`)
+inherit from — use it to apply project-wide admin conventions to the policy
+management screens. Must be a `ModelAdmin` subclass (else
+`ImproperlyConfigured`); resolved at admin import, so set it before startup.
