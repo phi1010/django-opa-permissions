@@ -1,0 +1,7 @@
+{% extends "admin/change_form.html" %}
+{% block object-tools-items %}
+  {% if opa_debug_url %}
+    <li><a href="{{ opa_debug_url }}" class="viewsitelink">Debug policy</a></li>
+  {% endif %}
+  {{ block.super }}
+{% endblock %}

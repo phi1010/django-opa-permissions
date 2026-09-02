@@ -1,0 +1,71 @@
+{% extends "admin/base_site.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<style>
+  .opa-debug form.opa-form { margin-bottom: 1.5em; }
+  .opa-debug form.opa-form p { display: inline-block; margin-right: 1.5em; }
+  .opa-src { font-family: monospace; font-size: 12px; border: 1px solid var(--border-color, #ccc); margin-bottom: 1.5em; overflow-x: auto; }
+  .opa-src h3 { margin: 0; padding: 4px 8px; background: var(--darkened-bg, #f2f2f2); }
+  .opa-line { display: flex; white-space: pre; }
+  .opa-line .ln { width: 3.5em; text-align: right; padding-right: 8px; color: #888; user-select: none; flex-shrink: 0; }
+  .opa-line.covered { background: rgba(0, 170, 0, 0.15); }
+  .opa-line.not-covered { background: rgba(220, 0, 0, 0.12); }
+  .opa-print { display: flex; white-space: pre-wrap; background: rgba(30, 100, 220, 0.12); font-style: italic; }
+  .opa-print .ln { width: 3.5em; padding-right: 8px; flex-shrink: 0; text-align: right; }
+  .opa-verdict { font-size: 1.2em; font-weight: bold; margin: 0.5em 0; }
+  .opa-verdict.allow { color: #0a0; }
+  .opa-verdict.deny { color: #c00; }
+  .opa-tree pre, .opa-input pre { background: var(--darkened-bg, #f7f7f7); padding: 8px; overflow-x: auto; }
+  .opa-badge { display: inline-block; padding: 2px 8px; border-radius: 8px; background: #eee; font-family: monospace; }
+</style>
+<div class="opa-debug">
+  <p>Policy set: <strong>{{ policy_set.name }}</strong></p>
+  <form method="post" class="opa-form">{% csrf_token %}
+    {{ form.as_p }}
+    <input type="submit" value="Evaluate">
+  </form>
+
+  {% if result %}
+    {% if result.error %}<p class="errornote">{{ result.error }}</p>{% endif %}
+
+    <p class="opa-verdict {% if result.allow %}allow{% else %}deny{% endif %}">
+      allow = {{ result.allow|default_if_none:"undefined" }}
+    </p>
+
+    {% for entry in result.policies %}
+      <div class="opa-src">
+        <h3>{{ entry.policy.name }} ({{ entry.policy.filename }})</h3>
+        {% for line in entry.lines %}
+          <div class="opa-line {{ line.state }}"><span class="ln">{{ line.number }}</span><span>{{ line.text }}</span></div>
+          {% for message in line.prints %}
+            <div class="opa-print"><span class="ln">🖨</span><span>{{ message }}</span></div>
+          {% endfor %}
+        {% endfor %}
+      </div>
+    {% endfor %}
+
+    <details class="opa-tree" open>
+      <summary><strong>Full output document (data.policies)</strong></summary>
+      <pre>{{ result.tree_json }}</pre>
+    </details>
+
+    <details class="opa-input">
+      <summary><strong>Input document</strong></summary>
+      <pre>{{ result.input_json }}</pre>
+    </details>
+
+    <h2>Browse prefilter</h2>
+    <p>Status: <span class="opa-badge">{{ result.prefilter.status }}</span>
+      {% if result.prefilter.detail %} — {{ result.prefilter.detail }}{% endif %}
+      {% if result.prefilter.object_included is not None and result.prefilter.status == "conditional" %}
+        {% if result.prefilter.object_included %}· object <strong>included</strong> by the prefilter
+        {% else %}· object <strong>excluded</strong> by the prefilter{% endif %}
+      {% endif %}
+    </p>
+    {% if result.prefilter.ucast_json %}
+      <details open><summary>Residual condition (UCAST)</summary>
+        <pre>{{ result.prefilter.ucast_json }}</pre></details>
+    {% endif %}
+  {% endif %}
+</div>
+{% endblock %}

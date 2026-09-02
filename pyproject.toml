@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "django-opa-permissions"
+version = "0.1.0"
+description = "Object-level Django permissions backed by OPA (Rego) policies stored in the database, with partial-evaluation queryset filtering."
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Phillip Kuhrt" }]
+requires-python = ">=3.14"
+classifiers = [
+    "Framework :: Django",
+    "Programming Language :: Python :: 3",
+    "Topic :: Security",
+]
+dependencies = [
+    "django>=4.2",
+    "opa-golib-python-bindings>=0.3.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/phi1010/django-opa-permissions"
+
+[dependency-groups]
+dev = [
+    "build>=1.6.0",
+]
+test = [
+    "pytest>=9.1.1",
+    "pytest-django>=4.14.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/django_opa_permissions"]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "example_project.settings"
+pythonpath = ["src", "example_project", "."]
+testpaths = ["tests"]
