@@ -71,7 +71,7 @@ class RegoSession:
 def sources_for_policy_set(policy_set) -> list[tuple[str, str]]:
     return [
         (policy.filename(), policy.source)
-        for policy in policy_set.policies.order_by("sort_order", "name")
+        for policy in policy_set.ordered_policies()
     ]
 
 
@@ -117,9 +117,9 @@ def clear_engine_cache():
 
 
 def _connect_signals():
-    from .models import Policy, PolicySet, PolicySetBinding
+    from .models import Policy, PolicySet, PolicySetBinding, PolicySetMembership
 
-    for model in (Policy, PolicySet, PolicySetBinding):
+    for model in (Policy, PolicySet, PolicySetBinding, PolicySetMembership):
         post_save.connect(_on_policy_change, sender=model, weak=False)
         post_delete.connect(_on_policy_change, sender=model, weak=False)
 

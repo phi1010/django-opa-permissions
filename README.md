@@ -7,8 +7,9 @@ no OPA server needed.
 
 ## Features
 
-- **Policies as DB objects** — `Policy` (UUID pk, Rego source) grouped into a
-  `PolicySet` via FK; a `PolicySetBinding` maps a Django model (ContentType) to
+- **Policies as DB objects** — `Policy` (UUID pk, Rego source) grouped into
+  `PolicySet`s via an ordered membership (a policy may belong to several
+  sets); a `PolicySetBinding` maps a Django model (ContentType) to
   the policyset governing it. Unbound models deny everything (superusers excepted).
 - **Auth backend** — `OpaPermissionBackend` implements
   `user.has_perm("app.view_book", obj)` so Django and DRF
@@ -97,8 +98,16 @@ modified.user_can(user, "change", old=snapshot)  # policies may fetch both state
 
 See `docs/` for the input schema, builtins, filter-rule grammar (relation
 paths and quantifiers), and subclassing the backend; `example_project/` is a
-runnable sqlite demo (`python manage.py migrate && python manage.py
-load_example_policies && python manage.py runserver`).
+runnable sqlite demo:
+
+```
+cd example_project
+python manage.py migrate
+python manage.py load_example_policies
+python manage.py create_demo_users   # alice/alice-password, bob/bob-password,
+                                     # admin/admin-password (superuser)
+python manage.py runserver
+```
 
 ## License
 

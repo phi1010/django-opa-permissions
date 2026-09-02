@@ -21,19 +21,19 @@ from django.utils.html import format_html
 
 from . import engine as engine_mod
 from .backends import get_backend
-from .models import Policy, PolicySet, PolicySetBinding
+from .models import Policy, PolicySet, PolicySetBinding, PolicySetMembership
 
 
-class PolicyInline(admin.TabularInline):
-    model = Policy
-    fields = ("name", "sort_order", "source")
+class PolicySetMembershipInline(admin.TabularInline):
+    model = PolicySetMembership
+    fields = ("policy", "sort_order")
     extra = 0
 
 
 @admin.register(PolicySet)
 class PolicySetAdmin(admin.ModelAdmin):
     list_display = ("name", "created_at", "updated_at")
-    inlines = [PolicyInline]
+    inlines = [PolicySetMembershipInline]
 
 
 @admin.register(PolicySetBinding)
@@ -109,9 +109,12 @@ def _annotate_policy(policy, prints, coverage):
 
 @admin.register(Policy)
 class PolicyAdmin(admin.ModelAdmin):
-    list_display = ("name", "policy_set", "sort_order", "debug_link")
-    list_select_related = ("policy_set",)
-    list_filter = ("policy_set",)
+    list_display = ("name", "sets", "debug_link")
+    list_filter = ("policy_sets",)
+
+    @admin.display(description="policy sets")
+    def sets(self, obj):
+        return ", ".join(str(s) for s in obj.policy_sets.all()) or "—"
 
     @admin.display(description="debug")
     def debug_link(self, obj):
@@ -133,15 +136,13 @@ class PolicyAdmin(admin.ModelAdmin):
         if not request.user.is_staff:
             raise PermissionDenied
         policy = get_object_or_404(Policy, pk=pk)
-        policy_set = policy.policy_set
         data = request.POST if request.method == "POST" else (
             request.GET if request.GET else None)
         form = PolicyDebugForm(data, request_user=request.user)
         context = {
             **self.admin_site.each_context(request),
-            "title": f"Debug policy set “{policy_set.name}”",
+            "title": f"Debug policy “{policy.name}”",
             "policy": policy,
-            "policy_set": policy_set,
             "form": form,
             "result": None,
         }
@@ -176,9 +177,10 @@ class PolicyAdmin(admin.ModelAdmin):
         result["allow"] = allow
         result["prints"] = [f"{loc}: {msg}" for msg, loc in prints]
         result["policies"] = [
-            _annotate_policy(p, prints, coverage)
-            for p in Policy.objects.filter(policy_set__bindings__content_type=ct)
-            .order_by("sort_order", "name")
+            _annotate_policy(m.policy, prints, coverage)
+            for m in PolicySetMembership.objects.filter(
+                policy_set__bindings__content_type=ct
+            ).select_related("policy").order_by("sort_order", "policy__name")
         ]
         # 2. full document tree
         try:
@@ -237,8 +239,8 @@ class OpaDebugAdminMixin:
                 .filter(content_type=ct)
                 .first()
             )
-            first = binding and binding.policy_set.policies.order_by(
-                "sort_order", "name").first()
+            ordered = binding.policy_set.ordered_policies() if binding else []
+            first = ordered[0] if ordered else None
             if first:
                 url = reverse("admin:django_opa_permissions_policy_debug",
                               args=[first.pk])

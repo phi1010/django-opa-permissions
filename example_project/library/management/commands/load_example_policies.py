@@ -3,7 +3,12 @@ from importlib.resources import files
 from django.contrib.contenttypes.models import ContentType
 from django.core.management.base import BaseCommand
 
-from django_opa_permissions.models import Policy, PolicySet, PolicySetBinding
+from django_opa_permissions.models import (
+    Policy,
+    PolicySet,
+    PolicySetBinding,
+    PolicySetMembership,
+)
 from library.models import Book
 
 
@@ -15,10 +20,11 @@ class Command(BaseCommand):
             files("django_opa_permissions") / "policies/examples/library.rego"
         ).read_text()
         policy_set, _ = PolicySet.objects.get_or_create(name="library-example")
-        Policy.objects.update_or_create(
-            policy_set=policy_set,
-            name="library",
-            defaults={"source": source, "sort_order": 0},
+        policy, _ = Policy.objects.update_or_create(
+            name="library", defaults={"source": source}
+        )
+        PolicySetMembership.objects.get_or_create(
+            policy=policy, policy_set=policy_set, defaults={"sort_order": 0}
         )
         ct = ContentType.objects.get_for_model(Book)
         PolicySetBinding.objects.update_or_create(

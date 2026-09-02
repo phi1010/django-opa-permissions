@@ -19,7 +19,11 @@
   .opa-badge { display: inline-block; padding: 2px 8px; border-radius: 8px; background: #eee; font-family: monospace; }
 </style>
 <div class="opa-debug">
-  <p>Policy set: <strong>{{ policy_set.name }}</strong></p>
+  <p>Policy: <strong>{{ policy.name }}</strong>
+    {% if policy.policy_sets.all %}(in
+      {% for s in policy.policy_sets.all %}{{ s.name }}{% if not forloop.last %}, {% endif %}{% endfor %})
+    {% endif %}
+  </p>
   <form method="post" class="opa-form">{% csrf_token %}
     {{ form.as_p }}
     <input type="submit" value="Evaluate">

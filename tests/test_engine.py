@@ -100,3 +100,50 @@ def test_broken_policyset_denies_instead_of_raising(make_policy, alice, monkeypa
     clear_engine_cache()
     book = Book.objects.create(title="b", owner=alice)
     assert not alice.has_perm("library.view_book", book)
+
+
+def test_model_base_setting(settings):
+    """DJANGO_OPA_MODEL_BASE resolves and validates the configured base."""
+    from django.core.exceptions import ImproperlyConfigured
+    from django.db import models as djmodels
+
+    from django_opa_permissions.base import OpaModelBase, get_model_base
+
+    assert get_model_base() is OpaModelBase
+    settings.DJANGO_OPA_MODEL_BASE = "django_opa_permissions.base.OpaModelBase"
+    assert get_model_base() is OpaModelBase
+    settings.DJANGO_OPA_MODEL_BASE = "django_opa_permissions.models.Policy"  # concrete
+    with pytest.raises(ImproperlyConfigured):
+        get_model_base()
+
+
+def test_models_use_default_base(db):
+    from django_opa_permissions.models import PolicySet
+
+    ps = PolicySet.objects.create(name="base-check")
+    assert ps.created_at is not None
+    import uuid as uuid_mod
+
+    assert isinstance(ps.pk, uuid_mod.UUID)
+
+
+def test_policy_in_multiple_sets(make_policy, alice):
+    """One policy can be a member of several policysets."""
+    from django.contrib.contenttypes.models import ContentType
+
+    from django_opa_permissions.models import PolicySet, PolicySetBinding, PolicySetMembership
+    from library.models import Team
+
+    policy = make_policy(ALLOW_ACTIVE)  # bound to Book via set-test
+    other = PolicySet.objects.create(name="other-set")
+    PolicySetMembership.objects.create(policy=policy, policy_set=other)
+    PolicySetBinding.objects.create(
+        content_type=ContentType.objects.get_for_model(Team),
+        policy_set=other,
+    )
+    book = Book.objects.create(title="b", owner=alice)
+    team = Team.objects.create(name="t")
+    assert alice.has_perm("library.view_book", book)
+    assert alice.has_perm("library.view_team", team)
+    assert set(policy.policy_sets.values_list("name", flat=True)) == {
+        "set-test", "other-set"}

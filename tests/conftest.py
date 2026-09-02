@@ -3,7 +3,12 @@ from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
 
 from django_opa_permissions.engine import clear_engine_cache
-from django_opa_permissions.models import Policy, PolicySet, PolicySetBinding
+from django_opa_permissions.models import (
+    Policy,
+    PolicySet,
+    PolicySetBinding,
+    PolicySetMembership,
+)
 from library.models import Book
 
 
@@ -20,9 +25,8 @@ def make_policy(db):
 
     def _make(source, model=Book, name="test"):
         policy_set = PolicySet.objects.create(name=f"set-{name}")
-        policy = Policy.objects.create(
-            policy_set=policy_set, name=name, source=source
-        )
+        policy = Policy.objects.create(name=name, source=source)
+        PolicySetMembership.objects.create(policy=policy, policy_set=policy_set)
         ct = ContentType.objects.get_for_model(model)
         PolicySetBinding.objects.update_or_create(
             content_type=ct, defaults={"policy_set": policy_set}
