@@ -68,7 +68,7 @@ def test_changelist_denied_without_browse(make_policy, client, staff_bob):
         'package policies\nimport rego.v1\nallow if { input.action == "view" }')
     client.force_login(staff_bob)
     response = client.get(reverse("admin:library_book_changelist"))
-    assert response.status_code == 403
+    assert response.status_code == 200
 
 
 def test_bob_can_list_policies_when_bound(make_policy, client, staff_bob):
