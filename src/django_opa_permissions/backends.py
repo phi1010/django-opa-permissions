@@ -228,10 +228,7 @@ class OpaPermissionBackend(BaseBackend):
             if not isinstance(obj, model_cls):
                 return False
             return self.check_permission(user_obj, action, model_cls, obj=obj)
-        if action == BROWSE_ACTION or action == "add" or action == "create":
-            # model-level checks: browse ("may list at all") and creation
-            return self.check_permission(user_obj, action, model_cls)
-        return False
+        return self.check_permission(user_obj, action, model_cls)
 
     def has_module_perms(self, user_obj, app_label):
         if self.is_bypass(user_obj):
