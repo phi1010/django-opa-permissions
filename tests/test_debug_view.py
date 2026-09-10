@@ -2,6 +2,7 @@ import pytest
 from django.contrib.auth.models import User
 from django.urls import reverse
 
+from django_opa_permissions.models import Policy
 from library.models import Book
 
 pytestmark = pytest.mark.django_db
@@ -81,6 +82,57 @@ def test_debug_view_requires_staff(make_policy, client, alice):
     assert response.status_code in (302, 403)
 
 
+def test_debug_view_requires_change_permission(make_policy, client, alice):
+    """Staff users without the change-policy permission get PermissionDenied."""
+    from django.contrib.auth.models import Permission
+
+    policy = make_policy(POLICY)
+    alice.is_staff = True
+    alice.save()
+    alice.user_permissions.add(
+        Permission.objects.get(codename="view_policy"))  # view is not enough
+    alice = type(alice).objects.get(pk=alice.pk)  # clear perm cache
+    client.force_login(alice)
+    response = client.get(_debug_url(policy))
+    assert response.status_code == 403
+
+
+def test_debug_view_allows_django_change_permission(make_policy, client, alice):
+    """The classic ``change_policy`` permission unlocks the debugger too."""
+    from django.contrib.auth.models import Permission
+
+    policy = make_policy(POLICY)
+    alice.is_staff = True
+    alice.save()
+    alice.user_permissions.add(
+        Permission.objects.get(codename="change_policy"))
+    alice = type(alice).objects.get(pk=alice.pk)  # clear perm cache
+    client.force_login(alice)
+    response = client.get(_debug_url(policy))
+    assert response.status_code == 200
+    assert b"Evaluate" in response.content
+
+
+def test_debug_view_opa_change_permission(make_policy, client, alice):
+    """An OPA policy bound to Policy granting change on that policy unlocks
+    the debugger for a non-superuser."""
+    from django_opa_permissions.models import Policy
+
+    policy = make_policy(POLICY)
+    make_policy(
+        "package policies\nimport rego.v1\n"
+        'allow if { input.action == "change" }',
+        model=Policy,
+        name="meta",
+    )
+    alice.is_staff = True
+    alice.save()
+    client.force_login(alice)
+    response = client.get(_debug_url(policy))
+    assert response.status_code == 200
+    assert b"Evaluate" in response.content
+
+
 def test_user_dropdown_filtered(make_policy, client, alice, bob, admin_user):
     """When the user model is OPA-bound, non-superusers only see users the
     browse prefilter yields (plus themselves)."""
@@ -91,6 +143,12 @@ def test_user_dropdown_filtered(make_policy, client, alice, bob, admin_user):
         "filter if { input.object.username == input.user.username }",
         model=User,
         name="users",
+    )
+    make_policy(  # grant alice change on the policy to open the debugger
+        "package policies\nimport rego.v1\n"
+        "allow if { input.action == \"change\" }",
+        model=Policy,
+        name="meta",
     )
     alice.is_staff = True
     alice.save()

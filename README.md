@@ -28,10 +28,13 @@ no OPA server needed.
 - **Admin integration** — `OpaModelAdminMixin` wires a `ModelAdmin` to OPA:
   the changelist is gated by the `browse` permission and filtered with the
   browse prefilter; object pages check `view`/`change`/`delete` per object.
+  Classic Django model permissions remain a fallback (see
+  [Security notes](#security-notes)).
 - **Admin policy debugger** — evaluate a policyset as any (visible) user
   against any bound model/object: `print()` output inline next to the policy
   line, per-line coverage highlighting, the full output document as a tree,
-  and the residual browse prefilter. No trace logs.
+  and the residual browse prefilter. No trace logs. Requires the change
+  permission on the policy (see [Security notes](#security-notes)).
 
 ## Install
 
@@ -111,6 +114,44 @@ python manage.py create_demo_users   # alice/alice-password, bob/bob-password,
                                      # admin/admin-password (superuser)
 python manage.py runserver
 ```
+
+## Security notes
+
+Read this before rolling out in a hostile environment. The design trades a
+few guarantees for admin ergonomics; every point below is deliberate and
+configurable.
+
+- **Admin falls back to classic Django permissions.** With
+  `OpaModelAdminMixin`, every OPA decision is OR-ed with the classic ModelAdmin
+  check: a user holding a traditional Django model permission (e.g.
+  `view_book` via groups + `ModelBackend`) gets **full, unfiltered** access to
+  that model in the admin — OPA row-level denies do not apply to them. This
+  keeps stock Django workflows working, but it means your Django groups must
+  not hold permissions on OPA-governed models if you want OPA to be the sole
+  authority. Audit `django.contrib.auth.models.Permission` assignments on
+  bound models accordingly.
+- **Policy authors can read your whole database.** The builtins
+  (`django_opa_fetch`, `django_opa_fetch_old`, `django_opa_query`) serialize
+  every concrete column of any model — including sensitive ones such as
+  `User.password` (the hash), tokens or secrets stored on rows — and they use
+  `_base_manager`, bypassing any permission-filtering manager. Anyone who can
+  create or edit a `Policy` (and anyone able to open the policy debugger)
+  can therefore read data your application policies are meant to protect.
+  Treat policy authorship as a highly privileged role; if you need redaction,
+  override `serialize_instance` / `get_builtins` in a backend subclass to
+  strip sensitive fields.
+- **Superusers bypass OPA by default.** `DJANGO_OPA_SUPERUSER_BYPASS` (default
+  `True`) lets superusers skip all policy checks, including the default-deny
+  for unbound models. Set it to `False` in settings if superusers must be
+  policy-governed too.
+- **The full OPA builtin surface is available to policies.** Beyond the
+  Django builtins, policies run on the embedded OPA engine
+  (`opa-golib-python-bindings`), so whatever builtins that engine exposes —
+  potentially including `http.send`, `net.*`, `opa.runtime` and
+  `crypto.*` — is callable from a policy. A policy author can make network
+  requests or read runtime configuration from inside your request path.
+  Verify the engine's capabilities for your deployment (e.g. via a
+  capabilities file) and restrict who may author policies.
 
 ## License
 

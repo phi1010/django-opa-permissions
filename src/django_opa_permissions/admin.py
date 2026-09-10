@@ -4,6 +4,8 @@ The debugger evaluates a policyset against a chosen user/model/action/object
 and renders, per policy source line: coverage highlighting and the output of
 ``print()`` calls inline next to their line. The full ``data.policies``
 document is shown as a tree. Trace logs are deliberately NOT collected.
+It requires the change permission on the policy (OPA per-object check with
+the classic Django ``change_policy`` fallback).
 """
 from __future__ import annotations
 
@@ -220,9 +222,9 @@ class PolicyAdmin(OpaModelAdminMixin, AdminBase):
         return custom + urls
 
     def debug_view(self, request, pk):
-        if not request.user.is_staff:
-            raise PermissionDenied
         policy = get_object_or_404(Policy, pk=pk)
+        if not self.has_change_permission(request, policy):
+            raise PermissionDenied
         data = request.POST if request.method == "POST" else (
             request.GET if request.GET else None)
         form = PolicyDebugForm(data, request_user=request.user)
