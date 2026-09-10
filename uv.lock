@@ -13,16 +13,16 @@ wheels = [
 
 [[package]]
 name = "build"
-version = "1.6.0"
+version = "1.6.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "colorama", marker = "os_name == 'nt'" },
     { name = "packaging" },
     { name = "pyproject-hooks" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4d/b7/1db48a9ce2984842c8c886432ec8a2719613322e868a966ba82a28862f25/build-1.6.0.tar.gz", hash = "sha256:bd2c8afc603e7a2e0ce70e2ea85f0a6d02043bafbd307f5bada0f98669eca5af", size = 113825, upload-time = "2026-08-27T21:01:16.458Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bd/67/4898a44ea4f3f8e213b0954ec0aa0a16971d62a6212d6ea3931e97115b99/build-1.6.1.tar.gz", hash = "sha256:51cc11666391ab6f092070437ac747002ff46f3e4113a3622177ee6b488bfc53", size = 113427, upload-time = "2026-09-10T07:56:00.417Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ab/e5/aa1e81b21aea0ce0ba435311837a37d4cb936e7461f9fecac08580073ba9/build-1.6.0-py3-none-any.whl", hash = "sha256:f7aaf1ebbb79178a02ba248bb524f2176b256017e17e8e4bd4289c7b38cc2bad", size = 31187, upload-time = "2026-08-27T21:01:14.957Z" },
+    { url = "https://files.pythonhosted.org/packages/ad/9b/9fb3585dabcd73a1b2a6267f63f62649347c9e6d072c9fde365b105abb2c/build-1.6.1-py3-none-any.whl", hash = "sha256:ecd351a4be9d35a9eaaba244a7687143c9c7d4aea6ac964e7e7ddab20cbcf4e7", size = 31179, upload-time = "2026-09-10T07:55:59.148Z" },
 ]
 
 [[package]]
@@ -50,7 +50,7 @@ wheels = [
 
 [[package]]
 name = "django-opa-permissions"
-version = "0.1.0"
+version = "0.4.0"
 source = { editable = "." }
 dependencies = [
     { name = "django" },
@@ -69,7 +69,7 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "django", specifier = ">=4.2" },
-    { name = "opa-golib-python-bindings", specifier = ">=0.3.0" },
+    { name = "opa-golib-python-bindings", specifier = ">=0.4.2" },
 ]
 
 [package.metadata.requires-dev]
@@ -90,14 +90,14 @@ wheels = [
 
 [[package]]
 name = "opa-golib-python-bindings"
-version = "0.3.0"
+version = "0.4.2"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/18/86/7551fb3752d534eb901717e98a52071f8272a9930b8e3fa99a131a30bd11/opa_golib_python_bindings-0.3.0.tar.gz", hash = "sha256:b787c28d6f72f26cf7320e6c97d900a9fc95b9442f31b31d39ef93c3d184035a", size = 23911, upload-time = "2026-08-27T15:01:00.452Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/99/7c/6fd87d962592e06011d3f5c0f8723e046ac0bd9f10bc3943e05307a19ca3/opa_golib_python_bindings-0.4.2.tar.gz", hash = "sha256:aeb87d3e8e7d7e308ae6c1238b5b126f761b0e214f623617e056a25b4cdb1500", size = 26079, upload-time = "2026-09-10T20:06:52.08Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3b/e7/b0346d1336a58aef3d5e0a7540d785a164d6e796786befd5b78887fcea25/opa_golib_python_bindings-0.3.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:ca24ee66c0f54d4a4ab3ee7b69c487117e41de44ffb39796ff8960669b87c426", size = 7820704, upload-time = "2026-08-27T15:00:51.434Z" },
-    { url = "https://files.pythonhosted.org/packages/1e/7e/86f467552ea4444b3cbc77944d45063ce7d56f84511b4ea3ba33cb640915/opa_golib_python_bindings-0.3.0-py3-none-macosx_11_0_x86_64.whl", hash = "sha256:2124dc90fe41ffd163ff9e988d90bafd5f143bf209dfb5618aaf5afcf18a64e6", size = 8492220, upload-time = "2026-08-27T15:00:53.51Z" },
-    { url = "https://files.pythonhosted.org/packages/7f/07/27094ce57808d85882866d7a931c7de690f8188e177638055456ae5ec306/opa_golib_python_bindings-0.3.0-py3-none-manylinux_2_34_aarch64.whl", hash = "sha256:e64bf1139a081c7defd7f69f3a0b0990232b8fc6b8daaa409beedd2e31c9db34", size = 13674865, upload-time = "2026-08-27T15:00:55.796Z" },
-    { url = "https://files.pythonhosted.org/packages/b7/4f/86f890f84714c1be97d61c5e7d9f61f04825fd4df1e823821dfddec98d29/opa_golib_python_bindings-0.3.0-py3-none-manylinux_2_34_x86_64.whl", hash = "sha256:34b66f0ffe74239545b45f5ccf2011a5040e73ec61f52f2790e974ba70c2d433", size = 15100738, upload-time = "2026-08-27T15:00:58.494Z" },
+    { url = "https://files.pythonhosted.org/packages/9e/25/14def5dc0c39c7add38a11d503e5f9a0b86017ae95fcbad48eb579cdaab3/opa_golib_python_bindings-0.4.2-py3-none-macosx_11_0_arm64.whl", hash = "sha256:64e745fda1585d96931be5aadf81226099818eccb61e5aa0953309a4ca037861", size = 6940160, upload-time = "2026-09-10T20:06:42.152Z" },
+    { url = "https://files.pythonhosted.org/packages/ca/d5/90e8ec886cb7b98f3e220f45c7a789b756b253b5f16318f22beeb6ff6cc4/opa_golib_python_bindings-0.4.2-py3-none-macosx_11_0_x86_64.whl", hash = "sha256:a9805c5a7ed458b50d0d8d314c8d14bf6d9137477a3aaa28db3cbb82a7e951c8", size = 7529519, upload-time = "2026-09-10T20:06:44.463Z" },
+    { url = "https://files.pythonhosted.org/packages/7e/54/2996d8774b63dfbc0eb4b68199a8cf7164fd439e36cea56d942a24cfdf90/opa_golib_python_bindings-0.4.2-py3-none-manylinux_2_34_aarch64.whl", hash = "sha256:51964e8ad00fcd16bd7848cb6d705d7798e38c028f977a3a42cf72beb988f996", size = 12117827, upload-time = "2026-09-10T20:06:46.611Z" },
+    { url = "https://files.pythonhosted.org/packages/99/64/f5be9046ab68eb3ac42b61e5e0d2c284859d03d7dbf1ea09a7d9a8c56fe2/opa_golib_python_bindings-0.4.2-py3-none-manylinux_2_34_x86_64.whl", hash = "sha256:c2dafc8418d5be1b4ad2d148246d94f6121e75faffa20ff4191ba1a4b70753e8", size = 13389729, upload-time = "2026-09-10T20:06:49.576Z" },
 ]
 
 [[package]]
