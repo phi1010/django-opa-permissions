@@ -1,4 +1,5 @@
-"""Admin for policies, policysets, bindings — and the policy debugger.
+"""Admin for policies, policysets, bindings — the policy debugger and the
+permission explorer.
 
 The debugger evaluates a policyset against a chosen user/model/action/object
 and renders, per policy source line: coverage highlighting and the output of
@@ -6,6 +7,11 @@ and renders, per policy source line: coverage highlighting and the output of
 document is shown as a tree. Trace logs are deliberately NOT collected.
 It requires the change permission on the policy (OPA per-object check with
 the classic Django ``change_policy`` fallback).
+
+The permission explorer answers two questions in bulk: *who* may perform a
+given permission (taken from the models' ``Permission`` rows plus the
+``browse`` pseudo-permission) and *which* permissions a given user holds. It
+is restricted to models whose governing policies the caller may all change.
 """
 from __future__ import annotations
 
@@ -14,6 +20,7 @@ import json
 from django import forms
 from django.contrib import admin
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import AnonymousUser, Permission
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q
@@ -64,20 +71,92 @@ class PolicyDebugForm(forms.Form):
 
     def __init__(self, *args, request_user=None, **kwargs):
         super().__init__(*args, **kwargs)
-        users = get_user_model()._default_manager.all()
-        # Show only users the calling user is allowed to see: if the user
-        # model is OPA-bound, apply the browse prefilter; superusers see all.
-        if not getattr(request_user, "is_superuser", False):
-            user_ct = ContentType.objects.get_for_model(get_user_model())
-            if PolicySetBinding.objects.filter(content_type=user_ct).exists():
-                users = users.filter(
-                    get_backend().compile_browse_q(request_user, get_user_model())
-                    | Q(pk=request_user.pk)
-                )
-        self.fields["user"].queryset = users.order_by("username")
+        self.fields["user"].queryset = visible_users(request_user)
         self.fields["content_type"].queryset = ContentType.objects.filter(
             pk__in=PolicySetBinding.objects.values("content_type")
         ).order_by("app_label", "model")
+
+
+def visible_users(request_user):
+    """Users the calling user is allowed to see: if the user model is
+    OPA-bound, apply the browse prefilter (plus the caller); superusers see
+    all."""
+    users = get_user_model()._default_manager.all()
+    if not getattr(request_user, "is_superuser", False):
+        user_ct = ContentType.objects.get_for_model(get_user_model())
+        if PolicySetBinding.objects.filter(content_type=user_ct).exists():
+            users = users.filter(
+                get_backend().compile_browse_q(request_user, get_user_model())
+                | Q(pk=request_user.pk)
+            )
+    return users.order_by("username")
+
+
+def model_permissions(content_type):
+    """Permission strings for one bound model: ``browse`` first, then every
+    ``Permission`` row of the model (Django defaults and ``Meta.permissions``)
+    as ``app_label.codename``, each mapped to its OPA action via the backend.
+    ``action`` is None for codenames the backend cannot map."""
+    backend = get_backend()
+    out = [{
+        "perm": f"{content_type.app_label}.browse_{content_type.model}",
+        "action": "browse",
+        "name": "Can browse (list) objects",
+    }]
+    for p in Permission.objects.filter(content_type=content_type).order_by("codename"):
+        perm = f"{content_type.app_label}.{p.codename}"
+        parsed = backend.parse_perm(perm)
+        action = None
+        if parsed is not None and parsed[2] == content_type.model:
+            action = parsed[1]
+        out.append({"perm": perm, "action": action, "name": p.name})
+    return out
+
+
+class WhoCanForm(forms.Form):
+    """Which users may perform one permission (on one object)?"""
+
+    mode = forms.CharField(widget=forms.HiddenInput, initial="who")
+    permission = forms.ChoiceField(choices=())
+    object_pk = forms.CharField(required=False, label="Object pk",
+                                help_text="Empty = model-level check.")
+
+    def __init__(self, *args, content_types=(), **kwargs):
+        super().__init__(*args, **kwargs)
+        groups = []
+        for ct in content_types:
+            groups.append((
+                f"{ct.app_label}.{ct.model}",
+                [(e["perm"], f"{e['perm']} — {e['name']}")
+                 for e in model_permissions(ct)],
+            ))
+        self.fields["permission"].choices = groups
+
+
+class WhatCanForm(forms.Form):
+    """Which permissions does one user hold (on one model / object)?"""
+
+    mode = forms.CharField(widget=forms.HiddenInput, initial="what")
+    user = forms.ModelChoiceField(queryset=None, required=False,
+                                  help_text="Empty = anonymous.")
+    content_type = forms.ModelChoiceField(
+        queryset=None, required=False, label="Model",
+        help_text="Empty = every model you may debug.")
+    object_pk = forms.CharField(required=False, label="Object pk",
+                                help_text="Only used together with a model.")
+
+    def __init__(self, *args, request_user=None, content_types=(), **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["user"].queryset = visible_users(request_user)
+        self.fields["content_type"].queryset = ContentType.objects.filter(
+            pk__in=[ct.pk for ct in content_types]
+        ).order_by("app_label", "model")
+
+    def clean(self):
+        data = super().clean()
+        if data.get("object_pk") and not data.get("content_type"):
+            self.add_error("object_pk", "Pick a model to check an object.")
+        return data
 
 
 def _flatten_coverage(coverage, filename):
@@ -200,6 +279,7 @@ class PolicySetBindingAdmin(OpaModelAdminMixin, AdminBase):
 class PolicyAdmin(OpaModelAdminMixin, AdminBase):
     list_display = ("name", "sets", "debug_link")
     list_filter = ("policy_sets",)
+    change_list_template = "django_opa_permissions/policy_change_list.html"
 
     @admin.display(description="policy sets")
     def sets(self, obj):
@@ -218,8 +298,132 @@ class PolicyAdmin(OpaModelAdminMixin, AdminBase):
                 self.admin_site.admin_view(self.debug_view),
                 name="django_opa_permissions_policy_debug",
             ),
+            path(
+                "permissions/",
+                self.admin_site.admin_view(self.permission_explorer_view),
+                name="django_opa_permissions_permission_explorer",
+            ),
         ]
         return custom + urls
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = {**(extra_context or {}), "show_permission_explorer":
+                         self.has_change_permission(request)}
+        return super().changelist_view(request, extra_context=extra_context)
+
+    # ── permission explorer ──────────────────────────────────────────────
+    def debuggable_content_types(self, request):
+        """Bound models whose governing policies the caller may *all* change
+        (superusers: every bound model)."""
+        bindings = (PolicySetBinding.objects.select_related("content_type", "policy_set")
+                    .order_by("content_type__app_label", "content_type__model"))
+        out = []
+        for binding in bindings:
+            policies = binding.policy_set.ordered_policies()
+            if policies and all(self.has_change_permission(request, p) for p in policies):
+                out.append(binding.content_type)
+        return out
+
+    def permission_explorer_view(self, request):
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+        cts = self.debuggable_content_types(request)
+        data = request.POST if request.method == "POST" else (
+            request.GET if request.GET else None)
+        mode = (data or {}).get("mode")
+        # Query parameters prefill the form that is not being submitted, so a
+        # link may seed both panels at once.
+        initial = {k: v for k, v in request.GET.items() if k != "mode"}
+        who_form = WhoCanForm(data if mode == "who" else None, content_types=cts,
+                              initial={**initial, "mode": "who"})
+        what_form = WhatCanForm(data if mode == "what" else None,
+                                request_user=request.user, content_types=cts,
+                                initial={**initial, "mode": "what"})
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Permission explorer",
+            "who_form": who_form,
+            "what_form": what_form,
+            "content_types": cts,
+            "who_result": None,
+            "what_result": None,
+        }
+        if mode == "who" and who_form.is_valid():
+            context["who_result"] = self._who_can(request, who_form, cts)
+        elif mode == "what" and what_form.is_valid():
+            context["what_result"] = self._what_can(what_form, cts)
+        return render(request, "django_opa_permissions/permission_explorer.html",
+                      context)
+
+    @staticmethod
+    def _check(backend, user, entry, ct, obj_pk):
+        """One cell: evaluate ``entry`` (from model_permissions) for ``user``."""
+        model_cls = ct.model_class()
+        cell = {"perm": entry["perm"], "action": entry["action"],
+                "name": entry["name"], "allowed": None, "note": ""}
+        if entry["action"] is None:
+            cell["note"] = "not mapped to an action by the backend"
+            return cell
+        if model_cls is None:
+            cell["note"] = "model class not installed"
+            return cell
+        if backend.is_bypass(user):
+            cell["allowed"] = True
+            cell["note"] = "superuser bypass"
+            return cell
+        try:
+            cell["allowed"] = backend.check_permission(
+                user, entry["action"], model_cls, obj_pk=obj_pk)
+        except Exception as exc:  # a policy error must not break the table
+            cell["note"] = f"error: {exc}"
+            return cell
+        if entry["action"] == "browse" and not obj_pk:
+            try:
+                qs = model_cls._base_manager.all()
+                cell["note"] = "{} of {} objects pass the prefilter".format(
+                    qs.filter(backend.compile_browse_q(user, model_cls)).count(),
+                    qs.count())
+            except Exception as exc:
+                cell["note"] = f"prefilter error: {exc}"
+        return cell
+
+    def _who_can(self, request, form, cts):
+        backend = get_backend()
+        perm = form.cleaned_data["permission"]
+        obj_pk = form.cleaned_data["object_pk"].strip() or None
+        ct = entry = None
+        for candidate in cts:
+            for e in model_permissions(candidate):
+                if e["perm"] == perm:
+                    ct, entry = candidate, e
+                    break
+            if ct:
+                break
+        if ct is None:
+            return {"error": "Unknown permission."}
+        rows = [{"user": None, "label": "anonymous",
+                 "cell": self._check(backend, AnonymousUser(), entry, ct, obj_pk)}]
+        for user in visible_users(request.user):
+            rows.append({"user": user, "label": str(user),
+                         "cell": self._check(backend, user, entry, ct, obj_pk)})
+        return {"entry": entry, "content_type": ct, "object_pk": obj_pk,
+                "rows": rows, "allowed_count": sum(1 for r in rows if r["cell"]["allowed"])}
+
+    def _what_can(self, form, cts):
+        backend = get_backend()
+        user = form.cleaned_data["user"] or AnonymousUser()
+        ct = form.cleaned_data["content_type"]
+        obj_pk = form.cleaned_data["object_pk"].strip() or None
+        targets = [c for c in cts if c.pk == ct.pk] if ct else cts
+        models = []
+        for target in targets:
+            models.append({
+                "content_type": target,
+                "cells": [self._check(backend, user, e, target, obj_pk)
+                          for e in model_permissions(target)],
+            })
+        return {"user": user, "label": str(user) if form.cleaned_data["user"] else "anonymous",
+                "object_pk": obj_pk, "models": models}
 
     def debug_view(self, request, pk):
         policy = get_object_or_404(Policy, pk=pk)
@@ -313,9 +517,10 @@ class PolicyAdmin(OpaModelAdminMixin, AdminBase):
 
 
 class OpaDebugAdminMixin:
-    """Add to a ModelAdmin to get a "Debug policy" link on every change form,
-    pointing at the policy debugger with model, object pk, action and the
-    current user prefilled."""
+    """Add to a ModelAdmin to get "Debug policy" and "Permission explorer"
+    links on every change form: the debugger with model, object pk, action
+    and the current user prefilled, the explorer asking who may view the
+    object and prefilled to list what the current user may do with it."""
 
     change_form_template = "django_opa_permissions/change_form_with_debug.html"
 
@@ -336,6 +541,12 @@ class OpaDebugAdminMixin:
                 context["opa_debug_url"] = (
                     f"{url}?content_type={ct.pk}&object_pk={obj.pk}"
                     f"&action=view&user={request.user.pk}"
+                )
+                explorer = reverse(
+                    "admin:django_opa_permissions_permission_explorer")
+                context["opa_explorer_url"] = (
+                    f"{explorer}?mode=who&permission={ct.app_label}.view_{ct.model}"
+                    f"&object_pk={obj.pk}&content_type={ct.pk}&user={request.user.pk}"
                 )
         response = super().render_change_form(request, context, add=add,
                                               change=change, form_url=form_url,

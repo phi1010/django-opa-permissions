@@ -35,6 +35,13 @@ no OPA server needed.
   line, per-line coverage highlighting, the full output document as a tree,
   and the residual browse prefilter. No trace logs. Requires the change
   permission on the policy (see [Security notes](#security-notes)).
+- **Admin permission explorer** — linked from the Policy changelist: answers
+  "who is allowed to `library.change_book` (on object 7)?" as a table over all
+  visible users, and "what may alice do?" as a table of every permission
+  string of each bound model (Django's default and `Meta.permissions`
+  codenames, plus the `browse` pseudo-permission; `browse` rows also report
+  how many objects the prefilter yields). Only models whose governing
+  policies you may all change are offered.
 
 ## Install
 
@@ -135,7 +142,7 @@ configurable.
   every concrete column of any model — including sensitive ones such as
   `User.password` (the hash), tokens or secrets stored on rows — and they use
   `_base_manager`, bypassing any permission-filtering manager. Anyone who can
-  create or edit a `Policy` (and anyone able to open the policy debugger)
+  create or edit a `Policy` (and anyone able to open the policy debugger or permission explorer)
   can therefore read data your application policies are meant to protect.
   Treat policy authorship as a highly privileged role; if you need redaction,
   override `serialize_instance` / `get_builtins` in a backend subclass to

@@ -1,0 +1,79 @@
+{% extends "admin/base_site.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<style>
+  .opa-explorer .opa-panel { border: 1px solid var(--border-color, #ccc); padding: 1em 1.5em; margin-bottom: 1.5em; }
+  .opa-explorer form p { display: inline-block; margin-right: 1.5em; vertical-align: top; }
+  .opa-explorer table { border-collapse: collapse; margin-top: 1em; }
+  .opa-explorer th, .opa-explorer td { padding: 4px 10px; border-bottom: 1px solid var(--hairline-color, #eee); text-align: left; }
+  .opa-explorer code { font-family: monospace; }
+  .opa-yes { color: #0a0; font-weight: bold; }
+  .opa-no { color: #c00; font-weight: bold; }
+  .opa-na { color: #888; }
+  .opa-note { color: #666; font-size: 0.9em; }
+</style>
+<div class="opa-explorer">
+  {% if not content_types %}
+    <p class="errornote">No bound models whose policies you may change — nothing to explore.</p>
+  {% endif %}
+
+  <div class="opa-panel">
+    <h2>Who is allowed to …?</h2>
+    <form method="post">{% csrf_token %}
+      {{ who_form.as_p }}
+      <input type="submit" value="Check users">
+    </form>
+    {% if who_result %}
+      {% if who_result.error %}<p class="errornote">{{ who_result.error }}</p>{% else %}
+        <p><code>{{ who_result.entry.perm }}</code> ({{ who_result.entry.name }}) on
+          <strong>{{ who_result.content_type.app_label }}.{{ who_result.content_type.model }}</strong>
+          {% if who_result.object_pk %}object <code>{{ who_result.object_pk }}</code>{% else %}(model-level){% endif %}
+          — action <code>{{ who_result.entry.action|default:"—" }}</code>,
+          allowed for {{ who_result.allowed_count }} of {{ who_result.rows|length }} users.</p>
+        <table>
+          <thead><tr><th>User</th><th>Allowed</th><th>Note</th></tr></thead>
+          <tbody>
+          {% for row in who_result.rows %}
+            <tr>
+              <td>{{ row.label }}</td>
+              <td>{% if row.cell.allowed is None %}<span class="opa-na">n/a</span>{% elif row.cell.allowed %}<span class="opa-yes">yes</span>{% else %}<span class="opa-no">no</span>{% endif %}</td>
+              <td class="opa-note">{{ row.cell.note }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      {% endif %}
+    {% endif %}
+  </div>
+
+  <div class="opa-panel">
+    <h2>What is a user allowed to do?</h2>
+    <form method="post">{% csrf_token %}
+      {{ what_form.as_p }}
+      <input type="submit" value="Check permissions">
+    </form>
+    {% if what_result %}
+      <p>Permissions of <strong>{{ what_result.label }}</strong>
+        {% if what_result.object_pk %}on object <code>{{ what_result.object_pk }}</code>{% else %}(model-level; object-bound rules may deny without an object){% endif %}</p>
+      {% for entry in what_result.models %}
+        <h3>{{ entry.content_type.app_label }}.{{ entry.content_type.model }}</h3>
+        <table>
+          <thead><tr><th>Permission</th><th>Action</th><th>Allowed</th><th>Note</th></tr></thead>
+          <tbody>
+          {% for cell in entry.cells %}
+            <tr>
+              <td><code>{{ cell.perm }}</code><br><span class="opa-note">{{ cell.name }}</span></td>
+              <td><code>{{ cell.action|default:"—" }}</code></td>
+              <td>{% if cell.allowed is None %}<span class="opa-na">n/a</span>{% elif cell.allowed %}<span class="opa-yes">yes</span>{% else %}<span class="opa-no">no</span>{% endif %}</td>
+              <td class="opa-note">{{ cell.note }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      {% empty %}
+        <p>No models to show.</p>
+      {% endfor %}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

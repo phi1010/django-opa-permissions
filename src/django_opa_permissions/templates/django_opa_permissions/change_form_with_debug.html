@@ -3,5 +3,8 @@
   {% if opa_debug_url %}
     <li><a href="{{ opa_debug_url }}" class="viewsitelink">Debug policy</a></li>
   {% endif %}
+  {% if opa_explorer_url %}
+    <li><a href="{{ opa_explorer_url }}" class="viewsitelink">Permission explorer</a></li>
+  {% endif %}
   {{ block.super }}
 {% endblock %}

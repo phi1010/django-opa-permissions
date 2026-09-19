@@ -1,0 +1,7 @@
+{% extends "admin/change_list.html" %}
+{% block object-tools-items %}
+  {% if show_permission_explorer %}
+    <li><a href="{% url 'admin:django_opa_permissions_permission_explorer' %}">Permission explorer</a></li>
+  {% endif %}
+  {{ block.super }}
+{% endblock %}
